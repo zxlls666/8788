@@ -4,7 +4,7 @@
 
 本地独立仓库：`/Users/serge/crypto/meme-bsc/baw-8788`；`origin` 为 `zxlls666/8788`；分支为 `local/security-hardening`，基于 `31e4ff3`。
 
-已修复审计中的元数据 XSS、单钱包预演失效、快速模式覆盖预演、自动买入停止竞态、跨重启预算和 HTTP 访问边界。默认快速模式关闭；真实执行必须在已鉴权请求中明确声明模式。详见 [本地修复与验证记录](docs/security-hardening.md)。
+已修复审计中的元数据 XSS、单钱包预演失效、快速模式覆盖预演、自动买入停止竞态、跨重启预算和 HTTP 访问边界。默认快速模式关闭；真实执行必须在已鉴权请求中明确声明模式。详见 [本地修复与验证记录](docs/security-hardening.md) 和 [修复包验收结果](docs/release-acceptance.md)。
 
 当前只完成源码放置与离线修复验证，未安装应用、扩展、本地启动组件或连接真实钱包。下方 `releases/` 中的上游 ZIP **不包含这些本地修复**，不可按已修复版本安装或分发；修复候选版命名为 `1.0.1-security-rc1`，构建与验收见安全记录。
 

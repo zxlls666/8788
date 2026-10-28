@@ -1,6 +1,6 @@
 {
   "passed": true,
-  "programFiles": 1910,
+  "programFiles": 1913,
   "checks": [
     "native install into path with spaces; exact file hash match",
     "refuses unrelated existing directory",

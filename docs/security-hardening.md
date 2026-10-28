@@ -78,3 +78,5 @@ node --import ./tests/network-guard.mjs tests/security-browser.mjs
 - 提交前重新运行 `node tests/run-safe.mjs`：46/46 通过；`node --import ./tests/network-guard.mjs tests/security-browser.mjs`：Chrome CSP 初始化与恶意符号文本渲染通过；`git diff --check` 与 Python 打包脚本 AST 检查通过。
 - Mac 安装器、打包后虚拟钱包测试和 ZIP 清单校验在构建后单独记录。Windows runner、Node 24、Intel 与真实扩展加载未由这些检查覆盖。
 - 原始 ZIP 保持不变；新包输出到 Downloads，不自动安装、不推送。
+
+构建后验收与剩余平台门禁见 [修复候选包验收记录](release-acceptance.md)。
