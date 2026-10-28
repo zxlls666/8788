@@ -11,6 +11,7 @@ verification/package-stage.json
 session.json
 settings.json
 copy-seen.json
+autobuy-budget.json*
 identities/
 *.pem
 *.key

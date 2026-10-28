@@ -1,5 +1,7 @@
 # 内盘一键买卖（Agentic 钱包签名）
 
+本地 `local/security-hardening` 分支的执行边界及验证状态以 [安全修复记录](../docs/security-hardening.md) 为准。源码修复未回填现有发行 ZIP。
+
 本地网页 + 本地签名桥：粘贴代币 CA → 自动解析 Market / Probe / Quote → 点一次按钮买入或卖出。
 
 **签名方是币安 Agentic 钱包**（`baw` CLI 的 dev-mode `contract-call`），不是普通 EOA。
@@ -18,7 +20,7 @@
 BSC 链上（Portal.buyWithQuote / Portal.sellBps / QUOTE.approve）
 ```
 
-浏览器里不需要装任何钱包扩展，也拿不到私钥；签名只在 `baw` 里发生。
+默认 Agentic 模式不向浏览器暴露钱包私钥，签名在 `baw` 中发生。另有下文说明的本地私钥模式，其私钥会进入浏览器和本机桥进程，不具有上述隔离保证。
 
 ## 启动
 
@@ -33,7 +35,7 @@ node serve.mjs
 
 ## 隐私
 
-这个压缩包里**没有任何**私钥、助记词、会话 token、cookie 或 `~/.baw` 文件——签名永远发生在你本机的 `baw` 里，包里只有代码。
+原始分发包不应包含私钥、助记词、会话 token、cookie 或 `~/.baw` 文件。Agentic 模式的签名由本机 `baw` 完成，本地私钥直签则由桥进程完成。
 
 - 页面里的 `__BRIDGE_TOKEN__` 是占位符，`serve.mjs` 每次启动随机生成后注入，只用于「本页 ↔ 本地桥」鉴权，不落盘、不复用
 - 示例脚本的 `WALLET` 默认是 `0x000…000`；要跑真实调用请自己传：`WALLET=0x你的地址 node verify.mjs`
@@ -174,8 +176,8 @@ GET  /api/gang/site-tokens
 - 持仓条：持仓数量、持仓成本、当前价值、未实现盈亏（当前价值按可卖报价估算）
 - 滑点 1%/3%/5%/自定义；Gas 慢/标准/快；MEV 保护开关都在交易面板
 - 滑点对所有路由生效；Gas/MEV 对 DEX 市价、换汇和 Gang 的 market-order 生效，Portal/four 内盘合约调用使用钱包默认 Gas/MEV
-- **快速交易**：默认开启，点买入/卖出数值直接发送，不再弹页面二次确认；可点「快速：开/关」关闭
-- 快速交易开启时会自动关闭「预演」；BAW 仍可能要求 Binance App 确认，这部分不能绕过
+- **快速交易**：默认关闭；显式开启后可跳过页面二次确认
+- 快速交易与预演独立，开启快速交易不会关闭或改写预演；预演时禁止签名执行。BAW 的 App 确认不能绕过
 - CA 输入框粘贴/输入完整 `0x...` 后自动解析；聚焦空输入框会尝试读取剪贴板；也可点「粘贴解析」
 - 卖出最终换 BNB；失败不自动重试
 - 旧的 Portal / four.meme / DEX / Gang 面板只作为隐藏执行层保留，不再显示
@@ -318,7 +320,7 @@ presetId = 1778027615735
 - 使用 OpenFour `buyByBudget` + 原生 zap，在同一笔交易内完成 BNB → 计价币 → 买入
 - 只支持预设白名单计价币（NVDAB / QQQB / BNCB / BNC4 / USDT / USDC / U / USD1）
 - 未知计价池、ZapRouter 变化、报价失败、需要 App 确认时停止该笔，不重试
-- 状态、去重和交易结果只存内存；重启后自动买入恢复为关闭
+- 自动买入重启后保持关闭；每日预算预留与已预留代币保存在独立数据目录的 `autobuy-budget.json`，重启不清零。执行失败或结果未知仍占用预留额度
 
 接口：
 
@@ -333,7 +335,7 @@ POST /api/preset-autobuy/arm
 POST /api/preset-autobuy/disarm
 ```
 
-监听状态和自动买入状态都只保存在 `serve.mjs` 进程内存中。
+监听和启用状态只保存在内存中；预算账本持久化。损坏账本或残留写锁会阻止继续提交，不应直接删除来恢复额度。
 
 
 ## 文件

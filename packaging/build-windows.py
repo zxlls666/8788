@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Package static, allowlisted source plus original dependencies. Never copy installed identities."""
-import hashlib, json, shutil, tempfile, zipfile
+import hashlib, json, shutil, subprocess, tempfile, zipfile
 from pathlib import Path
 root = Path(__file__).resolve().parent.parent
-name = 'BAW-Original-Multiwallet-Windows-1.0.0-rc5'
+name = 'BAW-Original-Multiwallet-Windows-1.0.1-security-rc1'
 output = Path.home() / 'Downloads' / (name + '.zip')
 if output.exists(): raise RuntimeError('Refusing to overwrite an existing release: ' + str(output))
 baseline = json.loads((root / 'original-sha256.json').read_text())
-shared = ['ca-input.mjs', 'copy-feed.mjs', 'multi-service.mjs', 'multi-store.mjs', 'profile-bootstrap.mjs', 'profile-keytar.mjs', 'wallet-features.css', 'wallet-features.js', 'wallet-runtime.mjs']
+shared = ['request-policy.mjs', 'auto-budget.mjs', 'ca-input.mjs', 'copy-feed.mjs', 'multi-service.mjs', 'multi-store.mjs', 'profile-bootstrap.mjs', 'profile-keytar.mjs', 'wallet-features.css', 'wallet-features.js', 'wallet-runtime.mjs']
 windows = ['Start-BAW.cmd', 'windows-launch.mjs', 'windows-runtime.mjs', 'windows-network.mjs', 'windows-install.mjs', 'windows-options.json']
 with tempfile.TemporaryDirectory(prefix='baw-windows-package-') as temporary:
     bundle = Path(temporary) / name
@@ -22,8 +22,12 @@ with tempfile.TemporaryDirectory(prefix='baw-windows-package-') as temporary:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
         manifest[relative] = hashlib.sha256(target.read_bytes()).hexdigest()
+    metadata = program / 'release-metadata.json'
+    metadata.write_text(json.dumps({'version': '1.0.1-security-rc1', 'sourceCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()}, indent=2) + '\n')
+    manifest[metadata.name] = hashlib.sha256(metadata.read_bytes()).hexdigest()
+    shutil.copy2(root / 'docs/security-hardening.md', bundle / 'security-hardening.md')
     unchanged = [p for p, h in baseline.items() if manifest[p] == h]
-    assert len(unchanged) == 1881
+    assert len(unchanged) == 1879
     marker = '.baw-original-multi-windows-package'
     (program / marker).write_text('BAW-Original-Multi-Windows\n')
     manifest[marker] = hashlib.sha256((program / marker).read_bytes()).hexdigest()

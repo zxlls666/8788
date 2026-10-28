@@ -13,6 +13,7 @@ test('original service serves integrated UI; new APIs authenticate and isolate m
  const checked=(await api('/api/multi/wallets/check',{id:w.id})).data;assert.equal(checked.status,'CONNECTED');assert.notEqual(checked.address,original.address);
  const scoped=(await api('/api/health',undefined,{'x-baw-wallet':w.id})).data;assert.equal(scoped.wallet,checked.address);
  const legacy=(await api('/api/health')).data;assert.equal(legacy.wallet,original.address);
+ assert.equal((await fetch(f.url+'/api/health')).status,401);
  assert.equal((await api('/api/health',undefined,{'x-baw-wallet':w.id,'x-bridge-token':'bad'})).status,401);
  assert.equal((await api('/api/health',undefined,{'x-baw-wallet':'../escape'})).status,400);
  assert.equal((await api('/api/preset-autobuy/arm',{}, {'x-baw-wallet':w.id})).status,400);

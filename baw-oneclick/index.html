@@ -852,7 +852,7 @@ const kvCopy = (k, addr) => `<div class="kv"><div class="k">${esc(k)}</div><div 
 
 /* ---------- bridge ---------- */
 async function bridge(path, opts = {}) {
-  const res = await fetch(path, { ...opts, headers: { 'content-type': 'application/json', 'x-bridge-token': BRIDGE_TOKEN, ...multi?.requestHeaders(path), ...(opts.headers || {}) } });
+  const res = await fetch(path, { ...opts, headers: { 'content-type': 'application/json', 'x-bridge-token': BRIDGE_TOKEN, 'x-baw-preview-only': $('#dryRun').checked ? '1' : '0', ...multi?.requestHeaders(path), ...(opts.headers || {}) } });
   const j = await res.json().catch(() => ({ ok: false, error: 'HTTP ' + res.status }));
   multi?.observe(path, j);
   if (!res.ok) {
@@ -1039,6 +1039,7 @@ async function dexBuy(skip = false) {
     return;
   }
   const q = await quoteDexBuy();
+  if ($('#dryRun').checked) { log('DEX 买入预演完成（仅报价，未提交）', 'ok'); return q; }
   const ca = $('#dexBuyCa').value.trim();
   const amount = $('#dexBuyAmount').value.trim();
   const name = q.quote && q.quote.toCoinSymbol ? q.quote.toCoinSymbol : 'TOKEN';
@@ -1106,6 +1107,7 @@ function gangBusyMessage(j, side = '交易') {
 
 async function buyGang(skip = false) {
   const q = await quoteGangBuy();
+  if ($('#dryRun').checked) { log('Gang 买入预演完成（仅报价，未提交）', 'ok'); return q; }
   const token = $('#gangToken').value.trim();
   const amount = $('#gangBnb').value.trim();
   const ok = await openRows('确认 Gang 买入', [
@@ -1198,6 +1200,7 @@ async function dexSellGeneric(skip = false) {
     return;
   }
   const { token, amount, q, pct } = await quoteDexSellGeneric();
+  if ($('#dryRun').checked) { log('DEX 卖出预演完成（仅报价，未提交）', 'ok'); return q; }
   const ok = await openRows('确认 DEX 卖出', [
     ['Token', short(token)],
     ['卖出比例', pct + '%'],
@@ -1231,6 +1234,7 @@ async function gangSell(skip = false) {
     body: JSON.stringify({ token, pct, ...tradeOptions() }),
   });
   if (!q.ok) throw new Error(q.error || 'Gang 卖出报价失败');
+  if ($('#dryRun').checked) { log('Gang 卖出预演完成（仅报价，未提交）', 'ok'); return q; }
   $('#gangSellSum').innerHTML =
     `<span>卖出 <b>${pct}%</b> · <b>${esc(q.tokensIn)}</b> ${esc(q.symbol)}</span>
      <span>预计得到 <b>${esc(q.gangOut)} ${esc(q.quote || 'GANG')}</b></span>
@@ -1290,6 +1294,7 @@ async function applyPk() {
   const j = await bridge('/api/addr', { method: 'POST', body: JSON.stringify({ privateKey: pk }) });
   if (!j.ok) throw new Error((j.error && j.error.message) || '私钥无效');
   state.pk = pk;
+  document.querySelector('#pk').value = '';
   state.sigMode = 'key';
   state.account = j.address;
   setPill(document.querySelector('#walletPill'), short(j.address), 'on');
@@ -1386,7 +1391,7 @@ function renderBalances() {
   box.innerHTML = state.info && state.info.native
     ? kv('钱包 BNB（本金 + gas）', `${fmt(bnb, 18)} BNB`, gasBad ? '<small class="bad">gas 可能不够</small>' : '')
     : `${kv('钱包 BNB（gas）', `${fmt(bnb, 18)} BNB`, gasBad ? '<small class="bad">gas 可能不足</small>' : '')}
-       ${kv('钱包 ' + (state.info ? state.info.quoteSym : 'QUOTE'), quote == null ? '—' : `${fmt(quote, state.info.decimals)} ${state.info.quoteSym}`)}`;
+       ${kv('钱包 ' + (state.info ? state.info.quoteSym : 'QUOTE'), quote == null ? '—' : `${fmt(quote, state.info.decimals)} ${esc(state.info.quoteSym)}`)}`;
 }
 
 /* ---------- resolve ---------- */
@@ -1490,14 +1495,14 @@ function renderToken() {
   if (!i) return;
   const st = i.status;
   const phaseWarn = st.PHASE !== '1'
-    ? `<div class="hint" style="color:var(--warn)">PHASE ${st.PHASE}：内盘已关闭${st.PHASE === '3' ? '（已发射，需到 DEX 交易）' : ''}，买入会被拒绝。</div>`
+    ? `<div class="hint" style="color:var(--warn)">PHASE ${esc(st.PHASE)}：内盘已关闭${st.PHASE === '3' ? '（已发射，需到 DEX 交易）' : ''}，买入会被拒绝。</div>`
     : '';
   $('#tokenInfo').innerHTML = [
     kvCopy('Market', i.market),
     kvCopy('Probe', i.probe),
-    kv('代币', i.tokenSym ? `${i.tokenSym} <small>${short(i.token)}</small>` : `<small>未部署（内盘阶段）</small>`),
-    kv('计价', `${i.quoteSym} <small>${i.decimals} 位${i.native ? ' · 原生' : ''}</small>`),
-    kv('状态', `PHASE ${st.PHASE} <small>BUY_OK ${st.BUY_OK ?? '—'} / SELL_OK ${i.pos.SELL_OK ?? '—'}</small>`),
+    kv('代币', i.tokenSym ? `${esc(i.tokenSym)} <small>${short(i.token)}</small>` : `<small>未部署（内盘阶段）</small>`),
+    kv('计价', `${esc(i.quoteSym)} <small>${i.decimals} 位${i.native ? ' · 原生' : ''}</small>`),
+    kv('状态', `PHASE ${esc(st.PHASE)} <small>BUY_OK ${esc(st.BUY_OK ?? '—')} / SELL_OK ${esc(i.pos.SELL_OK ?? '—')}</small>`),
     `<div id="balBox" style="display:contents"></div>`,
   ].join('') + phaseWarn;
   renderBuyMode();
@@ -1516,9 +1521,9 @@ function renderPosition() {
 
   $('#posGrid').innerHTML = [
     kv('我的份额', fmt(held, 18)),
-    kv('现在全卖约得', `${fmt(full, i.decimals, 8)} ${i.quoteSym}`),
+    kv('现在全卖约得', `${fmt(full, i.decimals, 8)} ${esc(i.quoteSym)}`),
     kv('剩余可买', `${fmt(room, 18)} <small>份</small>`),
-    kv('市场 ID', String(i.cap.ID ?? '—')),
+    kv('市场 ID', esc(i.cap.ID ?? '—')),
   ].join('');
   $('#poolBar').style.width = soldPct.toFixed(2) + '%';
   $('#poolLeft').textContent = `已售 ${soldPct.toFixed(2)}%`;
@@ -1658,7 +1663,7 @@ async function updateSellEstimate() {
     const out = plan.OUT_RAW ?? plan.OUT_WEI, min = plan.MIN_RAW ?? plan.MIN_WEI;
     $('#sellSum').innerHTML =
       `<span>卖出 <b>${fmt(plan.SHARES, 18)}</b> 份</span>
-       <span>预计到账 <b>${fmt(out, i.decimals, 8)}</b> ${i.quoteSym}</span>
+       <span>预计到账 <b>${fmt(out, i.decimals, 8)}</b> ${esc(i.quoteSym)}</span>
        <span>最少接受 <b>${fmt(min, i.decimals, 8)}</b></span>`;
   } catch (e) {
     $('#sellSum').innerHTML = `<span class="bad">${esc(e.message)}</span>`;
@@ -1786,14 +1791,14 @@ function openConfirm(p, skip = false) {
     });
   }
 
-  const amountLine = isBuy ? `${fmt(p.gross, i.decimals, 8)} ${i.quoteSym}` : `${fmt(p.plan.SHARES, 18)} 份（${p.pct}%）`;
-  const est = isBuy ? `${fmt(p.plan.BUY_SHARES, 18)} 份` : `${fmt(p.plan.OUT_RAW ?? p.plan.OUT_WEI, i.decimals, 8)} ${i.quoteSym}`;
-  const min = isBuy ? `${fmt(p.plan.MIN_SHARES, 18)} 份` : `${fmt(p.plan.MIN_RAW ?? p.plan.MIN_WEI, i.decimals, 8)} ${i.quoteSym}`;
+  const amountLine = isBuy ? `${fmt(p.gross, i.decimals, 8)} ${esc(i.quoteSym)}` : `${fmt(p.plan.SHARES, 18)} 份（${p.pct}%）`;
+  const est = isBuy ? `${fmt(p.plan.BUY_SHARES, 18)} 份` : `${fmt(p.plan.OUT_RAW ?? p.plan.OUT_WEI, i.decimals, 8)} ${esc(i.quoteSym)}`;
+  const min = isBuy ? `${fmt(p.plan.MIN_SHARES, 18)} 份` : `${fmt(p.plan.MIN_RAW ?? p.plan.MIN_WEI, i.decimals, 8)} ${esc(i.quoteSym)}`;
 
   $('#dlgTitle').textContent = isBuy ? '确认买入' : '确认卖出';
   $('#dlgBody').innerHTML = `
     <div class="dlg-row"><span>Market</span><b class="mono">${short(i.market)}</b></div>
-    <div class="dlg-row"><span>池子</span><b>${i.quoteSym}${i.native ? '（原生）' : ''}</b></div>
+    <div class="dlg-row"><span>池子</span><b>${esc(i.quoteSym)}${i.native ? '（原生）' : ''}</b></div>
     <div class="dlg-row"><span>${isBuy ? '支付' : '卖出'}</span><b>${amountLine}</b></div>
     <div class="dlg-row"><span>预计得到</span><b>${est}</b></div>
     <div class="dlg-row"><span>最少接受</span><b>${min}</b></div>
@@ -2496,7 +2501,7 @@ function setupUnifiedTrade() {
   if (pill) { pill.className = 'pill off'; pill.innerHTML = '<i></i>自动识别'; }
 }
 
-let quickTrade = localStorage.getItem('baw.quickTrade') !== '0';
+let quickTrade = localStorage.getItem('baw.quickTrade') === '1';
 
 function renderQuickTrade() {
   const b = $('#btnTwQuick');
@@ -2511,12 +2516,6 @@ function renderQuickTrade() {
 function setQuickTrade(on, silent = false) {
   quickTrade = !!on;
   localStorage.setItem('baw.quickTrade', quickTrade ? '1' : '0');
-  if (quickTrade && $('#dryRun').checked) {
-    $('#dryRun').checked = false;
-    localStorage.setItem('baw.dry', '0');
-    syncMode();
-    if (!silent) log('快速交易开启：预演已关闭，点数值会直接发送交易', 'warn');
-  }
   renderQuickTrade();
 }
 
@@ -2642,6 +2641,7 @@ async function uniBuy(amountArg, skip = quickTrade, multiBypass = false) {
 async function sellPortalPhase3(pct, skip = false) {
   const info = state.info;
   if (!info) throw new Error('Portal 状态未准备好');
+  if ($('#dryRun').checked) { log('PHASE 3 预演：需要 claim 后才能卖出，未提交 claim 或卖出', 'warn'); return; }
   await preflight();
   const st = await P.readStatus(info.probe, state.account);
   const shares = BigInt(st.pos.HELD_SHARES || '0');

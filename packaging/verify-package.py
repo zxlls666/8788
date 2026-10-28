@@ -29,7 +29,7 @@ with tempfile.TemporaryDirectory(prefix='BAW Multi installer QA ') as temporary:
         before = hashes(destination)
         assert install(destination).returncode != 0
         assert hashes(destination) == before, 'Busy installation was changed'
-        result = subprocess.run([os.environ.get('BAW_QA_NODE', '/Users/rich/.nvm/versions/node/v24.13.0/bin/node'), str(destination / 'mac-launch.mjs')], env={**os.environ, 'PORT': str(port), 'BAW_CLI': '/nonexistent/NO_WALLET_CLI'}, capture_output=True, text=True)
+        result = subprocess.run([os.environ.get('BAW_QA_NODE', shutil.which('node')), str(destination / 'mac-launch.mjs')], env={**os.environ, 'PORT': str(port), 'BAW_CLI': '/nonexistent/NO_WALLET_CLI'}, capture_output=True, text=True)
         assert result.returncode != 0 and '未终止任何其他进程' in result.stderr, result.stderr
     result = install(destination)
     assert result.returncode == 0, result.stderr

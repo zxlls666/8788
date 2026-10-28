@@ -12,13 +12,16 @@ import { readFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
+import { extensionId } from '../native-install.mjs';
+import { executionScope, assertCliExecution, assertLiveExecution, validateLocalRequest, pagePolicy } from './request-policy.mjs';
 import { presetWatch } from './preset-watch.mjs';
 import { presetAutoBuyer } from './preset-autobuy.mjs';
 import { detectGang, quoteGang, buyGang, quoteGangSell, sellGang, gangBusy } from './gang-buy.mjs';
 import { walletRuntime, multiApi, requestWalletScope, copyFeed } from './multi-service.mjs';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
+const EXTENSION_ORIGIN = 'chrome-extension://' + extensionId(fileURLToPath(new URL('../', import.meta.url)));
 const PORT = Number(process.env.PORT || 8787);
 const TOKEN = process.env.BRIDGE_TOKEN || randomBytes(9).toString('hex');
 
@@ -115,6 +118,7 @@ function bawSpec() {
 }
 
 function runBaw(args, timeout = 180000) {
+  assertCliExecution(args);
   if (walletRuntime.current()) return walletRuntime.run(args, timeout);
   const spec = bawSpec();
   return new Promise((resolve) => {
@@ -1283,6 +1287,7 @@ async function apiSend(req, res) {
 
 /* ---------------- 本地私钥直签 ---------------- */
 async function apiSendKey(req, res) {
+  assertLiveExecution();
   const body = await readBody(req);
   const to = String(body.to || '').toLowerCase();
   const data = String(body.data || '');
@@ -1376,10 +1381,10 @@ async function handleRequest(req, res) {
     // Readiness probe for the local launcher; does not invoke the wallet CLI.
     if (url.pathname === '/api/launcher-status' && req.method === 'GET') return json(res, 200, { app: 'baw-original-multi', launcherProtocol: 1 });
 
-    if (url.pathname === '/api/health') return await apiHealth(req, res);
-
     if (url.pathname.startsWith('/api/')) {
       if (req.headers['x-bridge-token'] !== TOKEN) return json(res, 401, { ok: false, error: 'bad token' });
+      if (['/api/swap', '/api/dex-buy', '/api/dex-sell', '/api/gang/buy', '/api/gang/sell'].includes(url.pathname)) assertLiveExecution();
+      if (url.pathname === '/api/health') return await apiHealth(req, res);
       if (url.pathname.startsWith('/api/multi/')) return await multiApi(req, res, url.pathname, readBody, json);
       if (url.pathname === '/api/token-overview' && req.method === 'GET') return await apiTokenOverview(req, res);
       if (url.pathname === '/api/token-pnl' && req.method === 'GET') return await apiTokenPnl(req, res);
@@ -1427,6 +1432,7 @@ async function handleRequest(req, res) {
         catch (e) { return json(res, 200, { ok: false, error: e.message }); }
       }
       if (url.pathname === '/api/preset-autobuy/arm' && req.method === 'POST') {
+        assertLiveExecution();
         try { return json(res, 200, await presetAutoBuyer.arm()); }
         catch (e) { return json(res, 200, { ok: false, error: e.message }); }
       }
@@ -1448,14 +1454,20 @@ async function handleRequest(req, res) {
     let type = TYPES[extname(full).toLowerCase()] || 'application/octet-stream';
     if (full.endsWith('index.html')) {
       body = Buffer.from(body.toString('utf8').replace(/__BRIDGE_TOKEN__/g, TOKEN), 'utf8');
+      const script = body.toString('utf8').match(/<script type="module">([\s\S]*?)<\/script>/)?.[1];
+      if (!script) throw new Error('缺少页面入口脚本');
+      res.setHeader('content-security-policy', pagePolicy(EXTENSION_ORIGIN, createHash('sha256').update(script).digest('base64')));
     }
+    res.setHeader('x-content-type-options', 'nosniff');
     res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' });
     res.end(body);
   } catch (e) {
-    try { json(res, 500, { ok: false, error: e.message }); } catch { res.end('error'); }
+    try { json(res, e.statusCode || 500, { ok: false, error: e.message }); } catch { res.end('error'); }
   }
 }
 createServer((req, res) => {
+  try { validateLocalRequest(req, req.socket.localPort, EXTENSION_ORIGIN); }
+  catch (e) { return json(res, 403, { ok: false, error: e.message }); }
   // Scoped identity selection is authenticated, including /api/health. The legacy path is unchanged.
   if ((req.headers['x-baw-wallet'] || req.headers['x-baw-copy-job'] || req.headers['x-baw-preview-only']) && req.headers['x-bridge-token'] !== TOKEN) {
     return json(res, 401, { ok: false, error: 'bad token' });
@@ -1464,7 +1476,7 @@ createServer((req, res) => {
   if (req.headers['x-baw-wallet'] && (pathname.startsWith('/api/preset-') || ['/api/send-key', '/api/addr'].includes(pathname))) {
     return json(res, 400, { ok: false, error: '此原版功能只使用原有身份，不接受多钱包上下文' });
   }
-  Promise.resolve().then(() => requestWalletScope(req, () => handleRequest(req, res)))
+  Promise.resolve().then(() => executionScope(req.headers, () => requestWalletScope(req, () => handleRequest(req, res))))
     .catch(e => { if (!res.headersSent) json(res, 400, { ok: false, error: e.message }); else res.end(); });
 }).listen(PORT, '127.0.0.1', () => {
   console.log(`内盘一键买卖（Agentic 钱包签名）→ http://127.0.0.1:${PORT}`);

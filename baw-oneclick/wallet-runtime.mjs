@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join, dirname, isAbsolute } from 'node:path';
 import { addressPattern } from './multi-store.mjs';
+import { assertCliExecution } from './request-policy.mjs';
 
 const bootstrap = new URL('./profile-bootstrap.mjs', import.meta.url).href;
 export const walletContext = new AsyncLocalStorage();
@@ -86,6 +87,7 @@ export class WalletRuntime {
         if (i >= 0 && args[i + 1]?.toLowerCase() !== address.toLowerCase()) throw new Error('交易 from 与当前身份不同');
         this.permission(ctx, args);
       }
+      assertCliExecution(args);
       return this.runner(ctx.id, args, timeout);
     });
   }

@@ -6,6 +6,8 @@ import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { Interface, parseEther } from 'ethers';
 import { presetWatch, PRESET_ID } from './preset-watch.mjs';
+import { AutoBuyBudget } from './auto-budget.mjs';
+import { defaultDataDirectory } from './multi-store.mjs';
 
 const CORE = '0xebe7b6C1089D9F72aD07f34E36d898e44E5e27f3';
 const WBNB = '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c';
@@ -89,8 +91,10 @@ async function call(to, iface, fn, args = [], block = 'latest') {
   return iface.decodeFunctionResult(fn, result);
 }
 
-class PresetAutoBuyer {
-  constructor() {
+export class PresetAutoBuyer {
+  constructor({ budget = new AutoBuyBudget(defaultDataDirectory(), MAX_DAILY) } = {}) {
+    this.budget = budget;
+    this.generation = 0;
     this.armed = false;
     this.armedFromBlock = 0;
     this.queue = [];
@@ -136,6 +140,11 @@ class PresetAutoBuyer {
       this.count = 0;
       this.spentBnb = 0;
     }
+    if (this.wallet) {
+      const saved = this.budget.snapshot(this.wallet, this.day);
+      this.count = saved.count;
+      this.spentBnb = this.count * Number(BUDGET_BNB);
+    }
   }
 
   addLog(message, cls = '') {
@@ -153,16 +162,21 @@ class PresetAutoBuyer {
   }
 
   async arm() {
+    const generation = ++this.generation;
+    this.armed = false;
     this.resetDay();
     if (this.count >= MAX_DAILY) throw new Error(`今日已用满 ${MAX_DAILY} 笔自动买入`);
     const wallet = await this.getWallet();
+    this.resetDay();
+    if (this.count >= MAX_DAILY) throw new Error(`今日已用满 ${MAX_DAILY} 笔自动买入`);
     const status = await bawData(['wallet', 'status', '--json']);
     if (status.status !== 'CONNECTED') throw new Error('Agentic 钱包未连接');
     const bal = BigInt(await rpc('eth_getBalance', [wallet, 'latest']));
     if (bal < BUDGET + MIN_GAS) throw new Error('BNB 不足：需要 0.1 + gas 预留');
     if (!presetWatch.active) await presetWatch.start();
     this.armedFromBlock = Number(presetWatch.lastHead || 0);
-    this.tried.clear();
+    if (generation !== this.generation) throw new Error('启用请求已取消');
+    this.tried = new Set(this.budget.snapshot(wallet, this.day).tokens);
     this.queue = [];
     this.armed = true;
     this.lastError = null;
@@ -187,6 +201,7 @@ class PresetAutoBuyer {
   }
 
   disarm(reason = '手动关闭') {
+    this.generation++;
     this.armed = false;
     this.queue = [];
     this.addLog(`自动买入已关闭：${reason}`, 'warn');
@@ -227,9 +242,14 @@ class PresetAutoBuyer {
   }
 
   async buy(event) {
-    this.resetDay();
+    const generation = this.generation;
+    const assertActive = () => {
+      if (!this.armed || generation !== this.generation) throw new Error('已关闭自动买入，本轮执行已取消');
+    };
     const symbol = event.symbol || short(event.token);
     try {
+      assertActive();
+      this.resetDay();
       if (this.count >= MAX_DAILY) throw new Error(`今日已达 ${MAX_DAILY} 笔上限`);
       const wallet = await this.getWallet();
       const cfg = await call(CORE, coreABI, 'tokens', [event.token]);
@@ -244,6 +264,7 @@ class PresetAutoBuyer {
       let phase = 0;
       for (let i = 0; i < 90; i++) {
         const [p] = await call(cfg.vault, viewABI, 'phase');
+        assertActive();
         phase = Number(p);
         if (phase === 1) break;
         if (phase === 3) throw new Error('内盘已结束/已迁移');
@@ -272,6 +293,7 @@ class PresetAutoBuyer {
       const data = coreABI.encodeFunctionData('buyByBudget', [event.token, maxQuotePay, minimum, 2n, '0x']);
 
       this.addLog(`准备买入 ${symbol}：0.1 BNB，计价 ${quoteSymbol}，含税费率 ${(feeBps / 100).toFixed(2)}%，zap 自动换汇，最低 ${minimum}`, 'warn');
+      assertActive();
       const preview = await runBaw([
         'contract-call', 'preview',
         '--binanceChainId', '56',
@@ -285,9 +307,12 @@ class PresetAutoBuyer {
         throw new Error((preview.json && preview.json.error && preview.json.error.message) || preview.stderr || '预演失败');
       }
       const p = preview.json.data;
+      assertActive();
       if (p.requireConfirmation) throw new Error('钱包要求 App 确认；自动买入不执行');
       if (!p.requestId) throw new Error('预演没有 requestId');
-      this.count++;
+      // Persist the reservation before any submission; restarting cannot erase this cost.
+      this.day = dayKey();
+      this.count = this.budget.reserve(wallet, this.day, event.token).count;
       this.spentBnb = this.count * 0.1;
       const exec = await runBaw(['contract-call', 'execute', '--requestId', p.requestId, '--json']);
       if (!exec.json || !exec.json.success) {

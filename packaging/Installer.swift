@@ -6,7 +6,7 @@ struct InstallFailure: LocalizedError {
     var errorDescription: String? { message }
 }
 let fm = FileManager.default
-let requiredFiles = ["native-host.mjs", "native-install.mjs", "chrome-extension/manifest.json", ".baw-original-multi-package", "baw-oneclick/serve.mjs", "baw-oneclick/node_modules/ethers/package.json", "mac-launch.mjs", "mac-network.mjs", "runtime.zsh", "启动原版服务.command", "mac-options.json", "baw-oneclick/wallet-runtime.mjs", "baw-oneclick/wallet-features.js", "baw-oneclick/copy-feed.mjs", "baw-oneclick/profile-bootstrap.mjs", "baw-oneclick/profile-keytar.mjs", "baw-oneclick/multi-service.mjs", "baw-oneclick/multi-store.mjs", "baw-oneclick/wallet-features.css", "baw-oneclick/ca-input.mjs"]
+let requiredFiles = ["baw-oneclick/request-policy.mjs", "baw-oneclick/auto-budget.mjs", "native-host.mjs", "native-install.mjs", "chrome-extension/manifest.json", ".baw-original-multi-package", "baw-oneclick/serve.mjs", "baw-oneclick/node_modules/ethers/package.json", "mac-launch.mjs", "mac-network.mjs", "runtime.zsh", "启动原版服务.command", "mac-options.json", "baw-oneclick/wallet-runtime.mjs", "baw-oneclick/wallet-features.js", "baw-oneclick/copy-feed.mjs", "baw-oneclick/profile-bootstrap.mjs", "baw-oneclick/profile-keytar.mjs", "baw-oneclick/multi-service.mjs", "baw-oneclick/multi-store.mjs", "baw-oneclick/wallet-features.css", "baw-oneclick/ca-input.mjs"]
 
 func validatePayload(_ root: URL) throws {
     for name in requiredFiles {
@@ -114,7 +114,7 @@ func runUI() {
     let destination = fm.homeDirectoryForCurrentUser.appendingPathComponent("Applications/BAW-Original-Multi")
     let prompt = NSAlert()
     prompt.messageText = "安装 BAW 原程序多钱包增强版"
-    prompt.informativeText = "将安装到你自己的用户目录：\n\(destination.path)\n\n在原版 BAW 页面与服务中增加独立身份、多钱包分组和跟单。未替换原交易函数。附带协作者扩展及按需启动组件；不代表找回最初截图的原扩展。\n\n需要 macOS 13.5+、Node.js 24 和 @binance/agentic-wallet 1.11.0。新增身份在钱包页逐个配对。"
+    prompt.informativeText = "将安装到你自己的用户目录：\n\(destination.path)\n\n在原版 BAW 页面与服务中增加独立身份、多钱包分组和跟单。包含预演执行拦截与预算持久化修复，快速模式默认关闭。附带协作者扩展及按需启动组件；不代表找回最初截图的原扩展。\n\n需要 macOS 13.5+、Node.js 24 和 @binance/agentic-wallet 1.11.0。新增身份在钱包页逐个配对。"
     prompt.addButton(withTitle: "安装")
     prompt.addButton(withTitle: "取消")
     guard prompt.runModal() == .alertFirstButtonReturn else { return }
